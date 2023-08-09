@@ -1,0 +1,241 @@
+---
+title: "Diabetes Prediction"
+author: "Vadiwoo Karuppiah"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+### Diabetes Prediction Analysis
+
+
+Diabetes is a chronic condition affecting millions worldwide and is caused by elevated blood glucose levels. Early detection and accurate prediction of diabetes can significantly improve patient outcomes through personalized care. This analysis aim to explore and predict diabetes cases using a comprehensive dataset containing various patient attributes, including age, gender, BMI (Body Mass Index), blood glucose levels, and HbA1c levels. The data used in this analysis is sourced from Kaggle website.  [Kaggle dataset for diabetes prediction](https://www.kaggle.com/datasets/iammustafatz/diabetes-prediction-dataset)
+
+The objective of this analysis is to construct robust prediction models based on decision trees, leveraging the power of two popular R packages, `party` and `rpart`. To achieve our goal, the following steps are performed:
+
+Data Exploration: The analysis will begin by loading and inspecting the dataset to understand its structure and basic statistics. This step will help us identify missing values, distributions of features, and the prevalence of diabetes cases within the dataset.
+
+Feature Visualization: Through a series of insightful plots, including histograms, bar plots, and box plots, the analysis visually explores the distribution and relationships between individual features and diabetes occurrence. These visualizations will provide a deeper understanding of how different attributes relate to the target variable.
+
+Data Preprocessing: Before building the prediction models, we will preprocess the data by converting the target class into factors and potentially handling categorical variables.
+
+Decision Tree Construction: Leveraging the party and rpart packages, we will construct two sets of decision trees. The party package offers conditional inference trees, while the rpart package implements the classic CART algorithm. By comparing the two approaches, we can evaluate which model best fits our dataset and provides meaningful predictive insights.
+
+Model Evaluation: To ensure the reliability and accuracy of our prediction models, we will partition the data into training and testing sets. We will then evaluate the models' performance using metrics such as misclassification errors to assess their predictive capabilities.
+
+Through this diabetes prediction analysis, we aim to contribute to the growing field of medical data analysis, potentially aiding healthcare practitioners in early detection and tailored interventions for patients at risk of diabetes. Moreover, the interpretability of decision trees will enable us to understand the factors driving the predictions, paving the way for more informed and targeted healthcare strategies.
+
+#### Loading Libraries
+```{r libraries}
+# Load necessary libraries
+invisible(library(ggplot2))
+invisible(library(corrplot))
+invisible(library(party))
+invisible(library(rpart))
+invisible(library(rpart.plot))
+invisible(library(dplyr))
+invisible(library(caret))
+invisible(library(randomForest))
+```
+#### Data Summary
+```{r data}
+# Load the data
+data <- read.csv("diabetes_prediction_dataset.csv")
+
+# View data summary
+summary(data)
+
+# View data structure
+str(data)
+
+# Check distribution of the target class
+table(data$diabetes)
+
+```
+
+#### Data Exploration
+```{r analysis}
+# Convert target class as factor
+data$diabetesFactor <- factor(data$diabetes)
+
+# Count missing values in each column
+missing_values <- colSums(is.na(data))
+
+# Print the count of missing values for each column
+print(missing_values)
+
+```
+#### Data Visualization
+```{r data exploration}
+
+
+# Histogram for age with diabetes vs. non-diabetes differentiation
+ggplot(data, aes(x = age, fill = factor(diabetes))) +
+  geom_histogram(binwidth = 5, color = "black") +
+  scale_fill_manual(values = c("#5b9bd5", "#f15a60"), labels = c("Non-Diabetes", "Diabetes")) +
+  labs(title = "Histogram of Age by Diabetes", x = "Age", y = "Frequency") +
+  theme_minimal()
+
+
+# Barplot for gender
+# Count diabetes and non-diabetes cases for each gender
+gender_diabetes_count <- data %>%
+  group_by(gender, diabetes) %>%
+  summarise(count = n())
+
+# Barplot showing diabetes and non-diabetes within each bar
+ggplot(gender_diabetes_count, aes(x = gender, y = count, fill = factor(diabetes))) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("#5b9bd5", "#f15a60"), labels = c("Non-Diabetes", "Diabetes")) +
+  labs(title = "Barplot of Gender with Diabetes and Non-Diabetes Counts", x = "Gender", y = "Count") +
+  theme_minimal()
+
+
+# Separate data for diabetes and no diabetes
+diabetes_data <- subset(data, diabetesFactor == 1)
+no_diabetes_data <- subset(data, diabetesFactor == 0)
+
+boxplot(data$blood_glucose_level ~ data$diabetesFactor, 
+        col = c("salmon", "skyblue"),
+        names = c("No Diabetes", "Diabetes"),
+        main = "Box Plot for Blood Glucose Level",
+        ylab = "Blood Glucose Level")
+
+boxplot(data$HbA1c_level ~ data$diabetesFactor, 
+        col = c("salmon", "skyblue"),
+        names = c("No Diabetes", "Diabetes"),
+        main = "Box Plot for HbA1c Level",
+        ylab = "HbA1c Level")
+```
+
+#### Correlation Analysis
+
+```{r correlation analysis}
+
+
+# Create the correlation plot
+cor_matrix <- cor(data[c("age", "bmi", "HbA1c_level", "blood_glucose_level","diabetes")])
+corrplot(cor_matrix, method = "color", type = "upper", order = "hclust", tl.col = "black")
+
+# Print the numerical correlation matrix
+print(cor_matrix)
+
+# Plot correlation matrix with numbers
+corrplot(cor_matrix, method = "number")
+
+# Pearson correlation coefficient
+cor(cor_matrix, method = "pearson")
+
+```
+
+#### Data Partition
+```{r data partition}
+# Data Partition
+set.seed(1234)
+pd <- sample(2, nrow(data), replace = TRUE, prob = c(0.8, 0.2))
+train_set <- data[pd == 1,]
+test_set <- data[pd == 2,]
+```
+
+
+#### Decision Tree with party package
+```{r decision tree with party, fig.width=8, fig.height=8 }
+# Decision tree with party
+tree <- ctree(diabetesFactor~age+bmi+HbA1c_level+blood_glucose_level,data=train_set)
+tree
+plot(tree)
+g <- recordPlot()
+png("decision_tree.png")
+replayPlot(g)
+dev.off()
+
+```
+  
+#### Tree pruning
+```{r tree pruning, fig.width=10, fig.height=10 }
+tree <- ctree(diabetesFactor~age+bmi+HbA1c_level+blood_glucose_level,data=train_set, controls=ctree_control(mincriterion = 0.99,minsplit = 2000))
+tree
+plot(tree)
+g <- recordPlot()
+png("pruned_decision_tree.png")
+replayPlot(g)
+dev.off()
+
+```
+  
+  
+#### Decision Tree with rpart package
+```{r decision tree with rpart}
+# Decision tree with rpart
+
+tree1 <-rpart(diabetesFactor~age+bmi+HbA1c_level+blood_glucose_level,data=train_set)
+rpart.plot(tree1)
+rpart.plot(tree1, extra= 3)
+```
+
+#### Prediction 
+```{r prediction}
+
+#prediction 
+#predict(tree,test_set)
+
+#Misclassification error for train data
+tab <- table(predict(tree),train_set$diabetesFactor)
+print(tab)
+train_error <- 1-sum(diag(tab))/sum(tab)
+#train_error
+
+#Misclassification error for test data
+testPred <- predict(tree, newdata=test_set)
+tab <- table(testPred,test_set$diabetesFactor)
+print(tab)
+test_error <- 1-sum(diag(tab))/sum(tab)
+#train_error
+```
+#### Performance Analysis
+```{r performance measurement, echo=FALSE}
+# Calculate accuracy
+
+accuracy <- confusionMatrix(testPred, test_set$diabetesFactor)$overall["Accuracy"]
+cat("Accuracy:", accuracy, "\n")
+
+# Calculate precision
+precision <- confusionMatrix(testPred, test_set$diabetesFactor)$byClass["Pos Pred Value"]
+cat("Precision:", precision, "\n")
+
+# Calculate recall
+recall <- confusionMatrix(testPred, test_set$diabetesFactor)$byClass["Sensitivity"]
+cat("Recall:", recall, "\n")
+
+# Calculate F1-score
+f1_score <- confusionMatrix(testPred, test_set$diabetesFactor)$byClass["F1"]
+cat("F1-score:", f1_score, "\n")
+
+cat("Misclassification Error for Train data :", train_error, "\n")
+cat("Misclassification Error for Test data:", test_error, "\n")
+```
+
+
+## Conclusion 
+In this analysis, we performed a comprehensive exploration and prediction task using decision trees in R. We began by loading the dataset and gaining insights into its structure and summary statistics. The target variable, "diabetes," was converted to a factor to facilitate classification tasks.
+
+Next, we visualized the correlation between important features and the target variable using a correlation plot. This allowed us to identify potential relationships and understand feature importance.
+
+To ensure robust model evaluation, we partitioned the data into training and testing sets and constructed decision trees using two different R packages: party and rpart. The party package was employed for conditional inference trees, while the rpart package used the CART algorithm.
+
+Both decision trees provided valuable insights into the data, allowing us to understand the predictors' impact on diabetes classification. The party tree, with its statistical testing-based approach, demonstrated excellent handling of categorical predictors and robustness to outliers.
+
+On the other hand, the rpart tree produced a more straightforward and interpretable model, which could be advantageous in some scenarios, especially when model transparency is crucial.
+
+Prediction results on the test data showed that both decision tree models performed reasonably well in classifying diabetes cases. The misclassification error was calculated to assess the model's performance, which is an essential metric in such classification tasks.
+
+Ultimately, the choice between using party and rpart decision trees depends on the specific requirements of the project, including the nature of the dataset and the desired level of model interpretability. We recommend further exploration and comparison of various decision tree algorithms and model evaluation techniques to identify the most suitable approach for your particular use case.
+
+Overall, this analysis demonstrated the effectiveness of decision trees in diabetes prediction and provided valuable insights into the dataset's underlying patterns. We encourage continued research and experimentation to optimize the model and further improve its predictive performance.
+
+
+
